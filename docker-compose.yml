@@ -6,7 +6,9 @@ services:
     env_file: .env
     volumes:
       - theia-data:/data
-    command: ["theia", "--interval", "15"]
+    command: ["theia", "dashboard", "--interval", "15", "--port", "8000"]
+    ports:
+      - "8000:8000"
 
 volumes:
   theia-data:

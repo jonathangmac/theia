@@ -10,7 +10,7 @@ RUN pip install --no-cache-dir yt-dlp
 WORKDIR /app
 
 COPY pyproject.toml ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[api]"
 
 COPY src/ src/
 COPY .env.example .env.example
@@ -20,4 +20,4 @@ ENV THEIA_DATA_DIR=/data
 
 VOLUME ["/data"]
 
-CMD ["theia", "--interval", "15"]
+CMD ["theia", "run", "--interval", "15"]

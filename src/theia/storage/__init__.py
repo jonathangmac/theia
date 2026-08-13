@@ -20,6 +20,7 @@ class SceneRecord:
     confidence: float
     severity: str
     frame_path: str | None = None
+    stream_name: str | None = None
 
 
 class SceneLog:

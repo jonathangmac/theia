@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     capture_interval: int = 15
     history_size: int = 10
     max_frames: int = 0
+    gate_threshold: int = 15
 
     # Streams
     streams: str = "https://youtu.be/3nyPER2kzqk"
