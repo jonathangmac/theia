@@ -1,0 +1,12 @@
+services:
+  theia:
+    build: .
+    container_name: theia
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - theia-data:/data
+    command: ["theia", "--interval", "15"]
+
+volumes:
+  theia-data:
