@@ -308,8 +308,18 @@ def create_app(settings: Settings, streams: list[tuple[str, str]] | None = None)
 
     pipeline = MultiCameraPipeline(settings)
 
+    # Store the main event loop so pipeline threads can schedule coroutines on it
+    main_loop: asyncio.AbstractEventLoop | None = None
+
     def on_scene(record: SceneRecord, stream_name: str):
-        """Callback when a new scene is analysed — broadcasts to WebSocket clients."""
+        """Callback when a new scene is analysed — broadcasts to WebSocket clients.
+
+        Runs in a pipeline thread, so we must use run_coroutine_threadsafe
+        to schedule the broadcast on the main FastAPI event loop.
+        """
+        if main_loop is None:
+            return
+
         data = {
             "type": "scene",
             "data": {
@@ -325,10 +335,13 @@ def create_app(settings: Settings, streams: list[tuple[str, str]] | None = None)
                 "stream_name": stream_name,
             },
         }
-        if record.is_outlier:
-            outlier_data = {**data["data"], "type": "outlier"}
-            asyncio.run(manager.broadcast({"type": "outlier", "data": data["data"]}))
-        asyncio.run(manager.broadcast(data))
+
+        async def _broadcast():
+            if record.is_outlier:
+                await manager.broadcast({"type": "outlier", "data": data["data"]})
+            await manager.broadcast(data)
+
+        asyncio.run_coroutine_threadsafe(_broadcast(), main_loop)
 
     if streams:
         for name, url in streams:
@@ -338,7 +351,9 @@ def create_app(settings: Settings, streams: list[tuple[str, str]] | None = None)
             pipeline.add_stream(f"camera-{i+1}", url)
 
     @app.on_event("startup")
-    def _startup():
+    async def _startup():
+        nonlocal main_loop
+        main_loop = asyncio.get_running_loop()
         pipeline.start()
 
     @app.on_event("shutdown")
@@ -366,6 +381,24 @@ def create_app(settings: Settings, streams: list[tuple[str, str]] | None = None)
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):
         await manager.connect(ws)
+        # Send recent scene history on connect so the client sees data immediately
+        recent = scene_log.read_all()[-10:]
+        for record in recent:
+            await ws.send_json({
+                "type": "scene",
+                "data": record,
+            })
+        # Send current stats
+        for name, stats in pipeline.stats().items():
+            await ws.send_json({
+                "type": "stats",
+                "data": {
+                    "captured": stats["frames_captured"],
+                    "processed": stats["frames_processed"],
+                    "skipped": stats["frames_skipped"],
+                    "outliers": stats["outliers_detected"],
+                },
+            })
         try:
             while True:
                 await ws.receive_text()
